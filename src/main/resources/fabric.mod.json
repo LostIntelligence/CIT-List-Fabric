@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "cit-list",
+	"version": "${version}",
+	"name": "CIT List",
+	"description": "This mod list all CIT (Custom item textures) that are enabled. (only works for vanilla style CIT)",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/cit-list/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"client": [
+			"lc.cit.list.CITListClient"
+		],
+		"modmenu": [
+      "lc.cit.list.TextureListModMenu"
+    ]
+	},
+	"depends": {
+		"fabricloader": ">=0.17.3",
+		"minecraft": "~1.21.7",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
