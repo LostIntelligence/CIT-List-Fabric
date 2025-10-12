@@ -11,7 +11,7 @@
 		"homepage": "",
 		"sources": "https://github.com/LostIntelligence/CIT-List-Fabric"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/cit-list/icon.png",
 	"environment": "*",
 	"entrypoints": {
