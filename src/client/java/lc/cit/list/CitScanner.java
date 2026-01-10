@@ -1,14 +1,13 @@
 package lc.cit.list;
 
 import com.google.gson.*;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.resource.Resource;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.server.packs.resources.ResourceManager;
 
 public class CitScanner {
 
@@ -21,7 +20,7 @@ public class CitScanner {
     public static BundleWrapper getAllCustomNameCITs() {
         List<String> result = new ArrayList<>();
         List<String> resultItem = new ArrayList<>();
-        ResourceManager rm = MinecraftClient.getInstance().getResourceManager();
+        ResourceManager rm = Minecraft.getInstance().getResourceManager();
         List<String> nameList = new ArrayList<>();
         List<String> conditionList = new ArrayList<>();
         List<String> packList = new ArrayList<>();
@@ -30,12 +29,12 @@ public class CitScanner {
             // rm.findResources("items", id -> true).forEach((id, res) ->
             // System.out.println(id.toString()));
             // Get all model JSONs
-            Map<Identifier, Resource> resources = rm.findResources("items", id -> id.getPath().endsWith(".json"));
+            Map<Identifier, Resource> resources = rm.listResources("items", id -> id.getPath().endsWith(".json"));
             for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {
                 Identifier id = entry.getKey();
                 Resource res = entry.getValue();
 
-                try (InputStreamReader reader = new InputStreamReader(res.getInputStream(), StandardCharsets.UTF_8)) {
+                try (InputStreamReader reader = new InputStreamReader(res.open(), StandardCharsets.UTF_8)) {
 
                     JsonObject root = GSON.fromJson(reader, JsonObject.class);
                     if (root == null)
@@ -64,7 +63,7 @@ public class CitScanner {
                                     .replace("items/", "")
                                     .replace(".json", "");
 
-                            String packName = res.getPack().getInfo().title().toString();
+                            String packName = res.source().location().title().toString();
                             packName = packName.replace("literal{", "").replace("}", "");
 
                             for (JsonElement el : cases) {
