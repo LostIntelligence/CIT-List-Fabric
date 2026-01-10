@@ -51,8 +51,9 @@ public class CitScanner {
                         String property = model.get("property").getAsString();
                         String component = model.get("component").getAsString();
 
-                        if (!"minecraft:component".equals(property)
-                                || !"minecraft:custom_name".equals(component))
+                        if (!(property.equals("minecraft:component") || property.equals("component")))
+                            continue;
+                        if (!(component.equals("minecraft:custom_name") || component.equals("custom_name")))
                             continue;
 
                         // Extract CIT cases
@@ -117,8 +118,11 @@ public class CitScanner {
 
         if (element.isJsonObject()) {
             JsonObject obj = element.getAsJsonObject();
-            if (obj.has("type") && "minecraft:select".equals(obj.get("type").getAsString())) {
-                found.add(obj);
+            if (obj.has("type")) {
+                String type = obj.get("type").getAsString();
+                if ("minecraft:select".equals(type) || "select".equals(type)) {
+                    found.add(obj);
+                }
             }
             for (Map.Entry<String, JsonElement> e : obj.entrySet()) {
                 found.addAll(findSelectBlocks(e.getValue()));
