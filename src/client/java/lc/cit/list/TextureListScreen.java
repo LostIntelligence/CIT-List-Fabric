@@ -3,6 +3,7 @@ package lc.cit.list;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -20,6 +21,17 @@ public class TextureListScreen extends Screen {
     private static int column2X;
     private static int column3X;
     private String[][] citArray;
+    private EditBox searchBox;
+    private Button searchButton;
+    private Button searchModeButton;
+
+    private enum SearchMode {
+        ITEM,
+        NEW_NAME,
+        PACK
+    }
+
+    private SearchMode searchMode = SearchMode.ITEM;
 
     public TextureListScreen(Screen parent) {
         super(Component.literal("Renameable CIT Textures"));
@@ -36,11 +48,24 @@ public class TextureListScreen extends Screen {
         column2X = this.width / 3;
         column3X = 2 * this.width / 3;
         int fontHeight = this.font.lineHeight;
-        int itemHeight = fontHeight + 4; // small padding
         int top = 20 + fontHeight + 2;
-        int bottom = top + itemHeight;
+        int exitButtonHeight = 20;
+        int searchBarHeight = 20;
+        int bottomPadding = 6;
 
-        this.list = new MappingsListWidget(this.minecraft, this.width - 10, this.height - 60, top, bottom, column1X,
+        int reservedBottom = exitButtonHeight +
+                searchBarHeight +
+                bottomPadding * 2;
+        int listHeight = this.height - reservedBottom;
+        int entryHeight = this.minecraft.font.lineHeight + 15;
+
+        this.list = new MappingsListWidget(
+                this.minecraft,
+                this.width - 10,
+                listHeight - top,
+                top,
+                entryHeight,
+                column1X,
                 column2X,
                 column3X);
 
@@ -76,6 +101,49 @@ public class TextureListScreen extends Screen {
                 .build();
 
         this.addRenderableWidget(exitButton);
+
+        int buttonHeight = 20;
+        int searchButtonWidth = 60;
+        int modeButtonWidth = 80;
+        int searchBarY = this.height - exitButtonHeight - bottomPadding - searchBarHeight;
+
+        // --- SEARCH BOX ---
+        this.searchBox = new EditBox(
+                this.font,
+                padding,
+                searchBarY,
+                this.width - (searchButtonWidth + modeButtonWidth + padding * 4),
+                buttonHeight,
+                Component.literal("Search"));
+        this.searchBox.setHint(Component.literal("Search..."));
+        this.addRenderableWidget(this.searchBox);
+
+        // --- MODE BUTTON ---
+        this.searchModeButton = Button.builder(
+                Component.literal("Item"),
+                btn -> cycleSearchMode())
+                .bounds(
+                        this.searchBox.getX() + this.searchBox.getWidth() + padding,
+                        searchBarY,
+                        modeButtonWidth,
+                        buttonHeight)
+                .build();
+        this.addRenderableWidget(this.searchModeButton);
+
+        // --- SEARCH BUTTON ---
+        this.searchButton = Button.builder(
+                Component.literal("Search"),
+                btn -> {
+                    applySearch();
+                    list.setScrollAmount(0); // 👈 reset scroll
+                })
+                .bounds(
+                        this.searchModeButton.getX() + modeButtonWidth + padding,
+                        searchBarY,
+                        searchButtonWidth,
+                        buttonHeight)
+                .build();
+        this.addRenderableWidget(this.searchButton);
 
     }
 
@@ -113,7 +181,8 @@ public class TextureListScreen extends Screen {
         context.drawString(this.font, "New Name", column2X, headerY, 0xFFFFFFFF, true);
         context.drawString(this.font, "Resourcepack", column3X, headerY, 0xFFFFFFFF, true);
 
-        context.fill(0, this.height - 30, this.width, this.height - 30 + 3, 0xFFAAAAAA); // light gray line
+        // context.fill(0, this.height - 30, this.width, this.height - 30 + 3,
+        // 0xFFAAAAAA); // light gray line
         // Everything Else
         super.render(context, mouseX, mouseY, delta);
     }
@@ -126,6 +195,55 @@ public class TextureListScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return true;
+    }
+
+    private void cycleSearchMode() {
+        switch (searchMode) {
+            case ITEM -> searchMode = SearchMode.NEW_NAME;
+            case NEW_NAME -> searchMode = SearchMode.PACK;
+            case PACK -> searchMode = SearchMode.ITEM;
+        }
+
+        this.searchModeButton.setMessage(Component.literal(
+                switch (searchMode) {
+                    case ITEM -> "Item";
+                    case NEW_NAME -> "Name";
+                    case PACK -> "Pack";
+                }));
+    }
+
+    private void applySearch() {
+        String query = searchBox.getValue().toLowerCase();
+        this.list.clearMappings();
+
+        for (String[] row : citArray) {
+            String itemName = row[0];
+            String newName = row[1];
+            String packName = row[2];
+
+            String target = switch (searchMode) {
+                case ITEM -> itemName;
+                case NEW_NAME -> newName;
+                case PACK -> packName;
+            };
+
+            if (!query.isEmpty() && !target.toLowerCase().contains(query)) {
+                continue;
+            }
+
+            Identifier id = Identifier.fromNamespaceAndPath("minecraft", itemName);
+            Item item = BuiltInRegistries.ITEM.getValue(id);
+            if (item == null)
+                continue;
+
+            ItemStack stack = new ItemStack(item);
+            stack.set(DataComponents.CUSTOM_NAME, Component.literal(newName));
+
+            this.list.addMapping(stack, itemName, newName, packName);
+        }
+
+        // Recalculate column widths after filtering
+        calculateColumnPositions();
     }
 
     private void calculateColumnPositions() {
@@ -157,15 +275,19 @@ public class TextureListScreen extends Screen {
     // ---------------------------------------------------------------
     private static class MappingsListWidget extends ObjectSelectionList<MappingsListWidget.TextEntry> {
 
-        public MappingsListWidget(Minecraft client, int width, int height, int top, int bottom, int col1,
+        public MappingsListWidget(Minecraft client, int width, int listheight, int top, int entryHeight, int col1,
                 int col2,
                 int col3) {
-            super(client, width, height, top, bottom);
+            super(client, width, listheight, top, entryHeight);
 
         }
 
         public void addMapping(ItemStack stack, String itemName, String newName, String packName) {
             this.addEntry(new TextEntry(stack, itemName, newName, packName));
+        }
+
+        public void clearMappings() {
+            this.clearEntries();
         }
 
         @Override
