@@ -1,14 +1,13 @@
 package lc.cit.list;
 
 import com.google.gson.*;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.resource.Resource;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.server.packs.resources.ResourceManager;
 
 public class CitScanner {
 
@@ -18,24 +17,23 @@ public class CitScanner {
      * Scans all resource packs for CIT definitions depending on renamed items.
      * Returns entries in format: ItemName_NameToTriggerCIT_ResourcePack
      */
-    public static BundleWrapper getAllCustomNameCITs() {
-        List<String> result = new ArrayList<>();
+    public static String[][] getAllCustomNameCITs() {
         List<String> resultItem = new ArrayList<>();
-        ResourceManager rm = MinecraftClient.getInstance().getResourceManager();
+        ResourceManager rm = Minecraft.getInstance().getResourceManager();
         List<String> nameList = new ArrayList<>();
         List<String> conditionList = new ArrayList<>();
         List<String> packList = new ArrayList<>();
-
+        String[][] allResults = null;
         try {
             // rm.findResources("items", id -> true).forEach((id, res) ->
             // System.out.println(id.toString()));
             // Get all model JSONs
-            Map<Identifier, Resource> resources = rm.findResources("items", id -> id.getPath().endsWith(".json"));
+            Map<Identifier, Resource> resources = rm.listResources("items", id -> id.getPath().endsWith(".json"));
             for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {
                 Identifier id = entry.getKey();
                 Resource res = entry.getValue();
 
-                try (InputStreamReader reader = new InputStreamReader(res.getInputStream(), StandardCharsets.UTF_8)) {
+                try (InputStreamReader reader = new InputStreamReader(res.open(), StandardCharsets.UTF_8)) {
 
                     JsonObject root = GSON.fromJson(reader, JsonObject.class);
                     if (root == null)
@@ -64,7 +62,7 @@ public class CitScanner {
                                     .replace("items/", "")
                                     .replace(".json", "");
 
-                            String packName = res.getPack().getInfo().title().toString();
+                            String packName = res.source().location().title().toString();
                             packName = packName.replace("literal{", "").replace("}", "");
 
                             for (JsonElement el : cases) {
@@ -90,16 +88,11 @@ public class CitScanner {
                 }
             }
             if (nameList.size() > 0) {
-                int itemNameLenght = Collections.max(nameList, Comparator.comparing(String::length)).length();
-                int conditionListLenght = Collections.max(conditionList, Comparator.comparing(String::length)).length();
-                int packListLenght = Collections.max(packList, Comparator.comparing(String::length)).length();
-                for (int i = 0; i < packList.size(); i++) {
-                 
-                        result.add(String.format("%-" + itemNameLenght + "s", nameList.get(i)) + " - "
-                                + String.format("%-" + conditionListLenght + "s", conditionList.get(i)) + " - "
-                                + String.format("%-" + packListLenght + "s", packList.get(i)));
-
-                   
+                allResults = new String[nameList.size()][3];
+                for (int i = 0; i < nameList.size(); i++) {
+                   allResults[i][0] = nameList.get(i);
+                   allResults[i][1] = conditionList.get(i);
+                   allResults[i][2] = packList.get(i);
                 }
             }
 
@@ -107,7 +100,7 @@ public class CitScanner {
             System.err.println("[CIT Scanner] Resource scan error: " + e.getMessage());
         }
         System.out.println("[CIT Scanner] Scan Finished");
-        return new BundleWrapper(resultItem, result, conditionList);
+        return allResults;
     }
 
     /** Recursively finds all objects with "type": "minecraft:select". */

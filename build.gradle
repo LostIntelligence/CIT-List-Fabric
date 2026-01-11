@@ -77,8 +77,9 @@ def modName = project.base.archivesName.get()
 def mcVersion = project.minecraft_version
 def modVersion = project.version
 
-remapJar {
-    archiveFileName = "${modName}-${modVersion}_${mcVersion}.jar"
+// Configure the remapJar task
+tasks.named("remapJar") {
+    archiveFileName.set("${modName}-${modVersion}_${mcVersion}.jar")
 }
 
 
