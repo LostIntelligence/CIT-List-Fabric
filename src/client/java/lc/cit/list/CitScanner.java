@@ -18,7 +18,6 @@ public class CitScanner {
      * Returns entries in format: ItemName_NameToTriggerCIT_ResourcePack
      */
     public static String[][] getAllCustomNameCITs() {
-        List<String> resultItem = new ArrayList<>();
         ResourceManager rm = Minecraft.getInstance().getResourceManager();
         List<String> nameList = new ArrayList<>();
         List<String> conditionList = new ArrayList<>();
@@ -71,13 +70,27 @@ public class CitScanner {
                                 JsonObject caseObj = el.getAsJsonObject();
 
                                 if (caseObj.has("when")) {
-                                    String when = caseObj.get("when").getAsString();
-                                    nameList.add(itemName);
-                                    conditionList.add(when);
-                                    packList.add(packName);
-                                    String ite = id.getPath().replace(".json", "");
-                                    ite = ite.replaceFirst(".*/", "");
-                                    resultItem.add(ite);
+                                    JsonElement whenElement = caseObj.get("when");
+                                    List<String> whenValues = new ArrayList<>();
+                                    
+                                    // Handle both string and array formats
+                                    if (whenElement.isJsonPrimitive()) {
+                                        whenValues.add(whenElement.getAsString());
+                                    } else if (whenElement.isJsonArray()) {
+                                        JsonArray whenArray = whenElement.getAsJsonArray();
+                                        for (JsonElement nameEl : whenArray) {
+                                            if (nameEl.isJsonPrimitive()) {
+                                                whenValues.add(nameEl.getAsString());
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Add an entry for each possible name
+                                    for (String when : whenValues) {
+                                        nameList.add(itemName);
+                                        conditionList.add(when);
+                                        packList.add(packName);
+                                    }
                                 }
                             }
                         }
