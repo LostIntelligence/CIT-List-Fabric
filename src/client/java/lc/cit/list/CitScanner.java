@@ -73,13 +73,31 @@ public class CitScanner {
                                 JsonObject caseObj = el.getAsJsonObject();
 
                                 if (caseObj.has("when")) {
-                                    String when = caseObj.get("when").getAsString();
-                                    nameList.add(itemName);
-                                    conditionList.add(when);
-                                    packList.add(packName);
+                                    JsonElement whenElement = caseObj.get("when");
+                                    List<String> whenValues = new ArrayList<>();
+                                    
+                                    // Handle both string and array formats
+                                    if (whenElement.isJsonPrimitive()) {
+                                        whenValues.add(whenElement.getAsString());
+                                    } else if (whenElement.isJsonArray()) {
+                                        JsonArray whenArray = whenElement.getAsJsonArray();
+                                        for (JsonElement nameEl : whenArray) {
+                                            if (nameEl.isJsonPrimitive()) {
+                                                whenValues.add(nameEl.getAsString());
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Add an entry for each possible name
                                     String ite = id.getPath().replace(".json", "");
                                     ite = ite.replaceFirst(".*/", "");
-                                    resultItem.add(ite);
+                                    
+                                    for (String when : whenValues) {
+                                        nameList.add(itemName);
+                                        conditionList.add(when);
+                                        packList.add(packName);
+                                        resultItem.add(ite);
+                                    }
                                 }
                             }
                         }
