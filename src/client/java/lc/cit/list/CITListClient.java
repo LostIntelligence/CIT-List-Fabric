@@ -13,14 +13,15 @@ public class CITListClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+  	CitScannerReloadListener.register();
 		// This entrypoint is suitable for setting up client-specific logic, such as
 		// rendering.
 		KeyMapping.Category CATEGORY = new KeyMapping.Category(
-				Identifier.fromNamespaceAndPath("citlist", "openlist_category"));
+				Identifier.fromNamespaceAndPath("cit-list", "openlist_category"));
 
 		KeyMapping openCitList = KeyBindingHelper.registerKeyBinding(
 				new KeyMapping(
-						"key.citlist.openlist", // The translation key for the key mapping.
+						"key.cit-list.openlist", // The translation key for the key mapping.
 						InputConstants.Type.KEYSYM, // // The type of the keybinding; KEYSYM for keyboard, MOUSE for
 													// mouse.
 						GLFW.GLFW_KEY_J, // The GLFW keycode of the key.
