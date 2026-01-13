@@ -1,4 +1,5 @@
 {
-  "key.category.citlist.openlist_category": "CIT List",
-  "key.citlist.openlist": "Open CIT List"
+  "key.category.cit-list.openlist_category": "CIT List",
+  "key.cit-list.openlist": "Open CIT List",
+  "tooltip.cit-list.refresh": "Refresh the list\nThis may take some time and may slow down Minecraft\nThe list also refreshes when textures are loaded or reloaded"
 }

@@ -11,13 +11,32 @@ import net.minecraft.server.packs.resources.ResourceManager;
 
 public class CitScanner {
 
-    private static final Gson GSON = new Gson();
+    // ---------- Cache ----------
+    private static volatile String[][] cachedResults = new String[0][3];
+    private static volatile boolean loaded = false;
 
-    /**
-     * Scans all resource packs for CIT definitions depending on renamed items.
-     * Returns entries in format: ItemName_NameToTriggerCIT_ResourcePack
-     */
-    public static String[][] getAllCustomNameCITs() {
+    /** Returns the current cached results instantly. */
+    public static String[][] getCachedResults() {
+        return cachedResults;
+    }
+
+    /** Returns whether the cache is fully loaded. */
+    public static boolean isLoaded() {
+        return loaded;
+    }
+
+    /** Refresh the cache asynchronously. Call on resource reload / game start. */
+    public static void refreshCache() {
+        loaded = false;
+        new Thread(() -> {
+            cachedResults = getAllCustomNameCITs(); // run optimized scan
+            loaded = true;
+            System.out.println("[CIT Scanner] Cache refreshed, entries: " + cachedResults.length);
+        }, "CitScanner-Thread").start();
+    }
+
+    // ---------- Core scanning logic (optimized) ----------
+    private static String[][] getAllCustomNameCITs() {
         ResourceManager rm = Minecraft.getInstance().getResourceManager();
         List<String[]> rows = new ArrayList<>();
 
@@ -34,7 +53,7 @@ public class CitScanner {
                     JsonObject root = GSON.fromJson(reader, JsonObject.class);
                     if (root == null) continue;
 
-                    // Optional pre-check to skip irrelevant JSON files
+                    // Optional pre-check: skip files without 'select' to reduce recursion
                     if (!root.toString().contains("select")) continue;
 
                     List<JsonObject> selectBlocks = findSelectBlocks(root);
@@ -45,12 +64,11 @@ public class CitScanner {
                         String property = model.get("property").getAsString();
                         String component = model.get("component").getAsString();
 
-                        // Normalize prefixes once
+                        // Normalize 'minecraft:' prefix once
                         property = property.startsWith("minecraft:") ? property.substring(10) : property;
                         component = component.startsWith("minecraft:") ? component.substring(10) : component;
 
                         if (!"component".equals(property) || !"custom_name".equals(component)) continue;
-
                         if (!model.has("cases") || !model.get("cases").isJsonArray()) continue;
 
                         JsonArray cases = model.getAsJsonArray("cases");
@@ -61,7 +79,6 @@ public class CitScanner {
 
                         for (JsonElement el : cases) {
                             if (!el.isJsonObject()) continue;
-
                             JsonObject caseObj = el.getAsJsonObject();
                             if (!caseObj.has("when")) continue;
 
@@ -88,11 +105,15 @@ public class CitScanner {
             System.err.println("[CIT Scanner] Resource scan error: " + e.getMessage());
         }
 
-        System.out.println("[CIT Scanner] Scan Finished, found " + rows.size() + " entries");
+        System.out.println("[CIT Scanner] Scan finished, found " + rows.size() + " entries");
         return rows.toArray(new String[0][3]);
     }
 
-    /** Recursively finds all objects with "type": "minecraft:select". */
+    // ---------- Helpers ----------
+
+    private static final Gson GSON = new Gson();
+
+    /** Recursively finds all objects with type: 'minecraft:select' */
     private static List<JsonObject> findSelectBlocks(JsonElement element) {
         List<JsonObject> found = new ArrayList<>();
         if (element == null || element.isJsonNull()) return found;

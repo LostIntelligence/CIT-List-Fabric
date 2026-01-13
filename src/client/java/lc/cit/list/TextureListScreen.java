@@ -1,20 +1,34 @@
 package lc.cit.list;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.joml.Vector2i;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
+import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipPositioner;
+import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
+import net.minecraft.client.gui.screens.inventory.tooltip.TooltipRenderUtil;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.chat.Style;
+import net.minecraft.world.item.component.TooltipProvider;
 
 public class TextureListScreen extends Screen {
+    Identifier REFRESH_ICON = Identifier.fromNamespaceAndPath("cit-list", "textures/gui/refresh.png");
     private final Screen parent;
     private MappingsListWidget list;
     private static int column1X;
@@ -24,6 +38,7 @@ public class TextureListScreen extends Screen {
     private EditBox searchBox;
     private Button searchButton;
     private Button searchModeButton;
+    private Button refreshButton;
 
     private enum SearchMode {
         ITEM,
@@ -36,7 +51,7 @@ public class TextureListScreen extends Screen {
     public TextureListScreen(Screen parent) {
         super(Component.literal("Renameable CIT Textures"));
         this.parent = parent;
-        this.citArray = CitScanner.getAllCustomNameCITs();
+        this.citArray = CitScanner.getCachedResults();
     }
 
     @Override
@@ -135,7 +150,7 @@ public class TextureListScreen extends Screen {
                 Component.literal("Search"),
                 btn -> {
                     applySearch();
-                    list.setScrollAmount(0); // 👈 reset scroll
+                    list.setScrollAmount(0);
                 })
                 .bounds(
                         this.searchModeButton.getX() + modeButtonWidth + padding,
@@ -144,6 +159,20 @@ public class TextureListScreen extends Screen {
                         buttonHeight)
                 .build();
         this.addRenderableWidget(this.searchButton);
+
+        // --- REFRESH BUTTON ---
+        int buttonSize = 16;
+        this.refreshButton = Button.builder(Component.literal(""), // label hidden
+                btn -> {
+                    CitScanner.refreshCache();
+                    applySearch();
+
+                })
+                .bounds(this.width - buttonSize, 0, buttonSize, buttonSize)
+                .createNarration(supplier -> Component.literal("Refresh the list"))
+                .build();
+
+        this.addRenderableWidget(this.refreshButton);
 
     }
 
@@ -185,6 +214,64 @@ public class TextureListScreen extends Screen {
         // 0xFFAAAAAA); // light gray line
         // Everything Else
         super.render(context, mouseX, mouseY, delta);
+
+        if (refreshButton != null) {
+            int centerX = refreshButton.getX() + refreshButton.getWidth() / 2;
+            int centerY = refreshButton.getY() + (refreshButton.getHeight() - this.font.lineHeight) / 2;
+
+            int color = refreshButton.isHoveredOrFocused() ? 0xFFFFAA00 : 0xFFFFFFFF;
+
+            context.drawString(
+                    this.font,
+                    "⟳", // Unicode refresh symbol
+                    centerX - this.font.width("⟳") / 2,
+                    centerY,
+                    color,
+                    false);
+
+            if (refreshButton.isHoveredOrFocused()) {
+
+        Component tooltipText = Component.translatable("tooltip.cit-list.refresh");
+        List<ClientTooltipComponent> tooltip = new ArrayList<>();
+
+        for (String line : tooltipText.getString().split("\n")) {
+            tooltip.add(ClientTooltipComponent.create(
+                FormattedCharSequence.forward(line, Style.EMPTY)
+            ));
+        }
+
+        ClientTooltipPositioner positioner = (screenWidth, screenHeight, tooltipWidth, tooltipHeight, mX, mY) -> {
+    int x = refreshButton.getX();
+    int y = refreshButton.getY() + refreshButton.getHeight() + 2;
+
+    // Clamp x so tooltip doesn't go off the right edge
+    if (x + tooltipWidth > screenWidth) {
+        x = screenWidth - tooltipWidth +20; // small padding from the edge
+    }
+
+    // Clamp y so tooltip doesn't go off the bottom edge
+    if (y + tooltipHeight > screenHeight) {
+        y = refreshButton.getY() - tooltipHeight - 2; // render above button instead
+    }
+
+    return new Vector2i(x, y);
+};
+
+
+
+        // Render tooltip at mouse position
+        context.renderTooltip(
+            this.font,
+            tooltip,
+            mouseX,
+            mouseY,
+            positioner,
+            null
+        );
+    }
+
+        }
+
     }
 
     @Override
