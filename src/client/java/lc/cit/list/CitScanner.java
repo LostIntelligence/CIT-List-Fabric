@@ -11,85 +11,85 @@ import net.minecraft.server.packs.resources.ResourceManager;
 
 public class CitScanner {
 
-    private static final Gson GSON = new Gson();
+    // ---------- Cache ----------
+    private static volatile String[][] cachedResults = new String[0][3];
+    private static volatile boolean loaded = false;
 
-    /**
-     * Scans all resource packs for CIT definitions depending on renamed items.
-     * Returns entries in format: ItemName_NameToTriggerCIT_ResourcePack
-     */
-    public static String[][] getAllCustomNameCITs() {
+    /** Returns the current cached results instantly. */
+    public static String[][] getCachedResults() {
+        return cachedResults;
+    }
+
+    /** Returns whether the cache is fully loaded. */
+    public static boolean isLoaded() {
+        return loaded;
+    }
+
+    /** Refresh the cache asynchronously. Call on resource reload / game start. */
+    public static void refreshCache() {
+        loaded = false;
+        new Thread(() -> {
+            cachedResults = getAllCustomNameCITs(); // run optimized scan
+            loaded = true;
+            System.out.println("[CIT Scanner] Cache refreshed, entries: " + cachedResults.length);
+        }, "CitScanner-Thread").start();
+    }
+
+    // ---------- Core scanning logic (optimized) ----------
+    private static String[][] getAllCustomNameCITs() {
         ResourceManager rm = Minecraft.getInstance().getResourceManager();
-        List<String> nameList = new ArrayList<>();
-        List<String> conditionList = new ArrayList<>();
-        List<String> packList = new ArrayList<>();
-        String[][] allResults = null;
+        List<String[]> rows = new ArrayList<>();
+
         try {
-            // rm.findResources("items", id -> true).forEach((id, res) ->
-            // System.out.println(id.toString()));
-            // Get all model JSONs
             Map<Identifier, Resource> resources = rm.listResources("items", id -> id.getPath().endsWith(".json"));
+
             for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {
                 Identifier id = entry.getKey();
                 Resource res = entry.getValue();
 
+                final String packName = extractPackName(res);
+
                 try (InputStreamReader reader = new InputStreamReader(res.open(), StandardCharsets.UTF_8)) {
-
                     JsonObject root = GSON.fromJson(reader, JsonObject.class);
-                    if (root == null)
-                        continue;
+                    if (root == null) continue;
 
-                    // Recursively search for any object with "type": "minecraft:select"
+                    // Optional pre-check: skip files without 'select' to reduce recursion
+                    if (!root.toString().contains("select")) continue;
+
                     List<JsonObject> selectBlocks = findSelectBlocks(root);
 
                     for (JsonObject model : selectBlocks) {
-                        if (!model.has("property") || !model.has("component"))
-                            continue;
+                        if (!model.has("property") || !model.has("component")) continue;
 
                         String property = model.get("property").getAsString();
                         String component = model.get("component").getAsString();
 
-                        if (!(property.equals("minecraft:component") || property.equals("component")))
-                            continue;
-                        if (!(component.equals("minecraft:custom_name") || component.equals("custom_name")))
-                            continue;
+                        // Normalize 'minecraft:' prefix once
+                        property = property.startsWith("minecraft:") ? property.substring(10) : property;
+                        component = component.startsWith("minecraft:") ? component.substring(10) : component;
 
-                        // Extract CIT cases
-                        if (model.has("cases") && model.get("cases").isJsonArray()) {
-                            JsonArray cases = model.getAsJsonArray("cases");
+                        if (!"component".equals(property) || !"custom_name".equals(component)) continue;
+                        if (!model.has("cases") || !model.get("cases").isJsonArray()) continue;
 
-                            String itemName = id.getPath()
-                                    .replace("items/", "")
-                                    .replace(".json", "");
+                        JsonArray cases = model.getAsJsonArray("cases");
 
-                            String packName = res.source().location().title().toString();
-                            packName = packName.replace("literal{", "").replace("}", "");
+                        // Efficient item name extraction
+                        String path = id.getPath();
+                        String itemName = path.substring(6, path.length() - 5); // remove "items/" and ".json"
 
-                            for (JsonElement el : cases) {
-                                if (!el.isJsonObject())
-                                    continue;
-                                JsonObject caseObj = el.getAsJsonObject();
+                        for (JsonElement el : cases) {
+                            if (!el.isJsonObject()) continue;
+                            JsonObject caseObj = el.getAsJsonObject();
+                            if (!caseObj.has("when")) continue;
 
-                                if (caseObj.has("when")) {
-                                    JsonElement whenElement = caseObj.get("when");
-                                    List<String> whenValues = new ArrayList<>();
-                                    
-                                    // Handle both string and array formats
-                                    if (whenElement.isJsonPrimitive()) {
-                                        whenValues.add(whenElement.getAsString());
-                                    } else if (whenElement.isJsonArray()) {
-                                        JsonArray whenArray = whenElement.getAsJsonArray();
-                                        for (JsonElement nameEl : whenArray) {
-                                            if (nameEl.isJsonPrimitive()) {
-                                                whenValues.add(nameEl.getAsString());
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Add an entry for each possible name
-                                    for (String when : whenValues) {
-                                        nameList.add(itemName);
-                                        conditionList.add(when);
-                                        packList.add(packName);
+                            JsonElement whenElement = caseObj.get("when");
+
+                            if (whenElement.isJsonPrimitive()) {
+                                rows.add(new String[]{ itemName, whenElement.getAsString(), packName });
+                            } else if (whenElement.isJsonArray()) {
+                                for (JsonElement we : whenElement.getAsJsonArray()) {
+                                    if (we.isJsonPrimitive()) {
+                                        rows.add(new String[]{ itemName, we.getAsString(), packName });
                                     }
                                 }
                             }
@@ -100,27 +100,23 @@ public class CitScanner {
                     System.err.println("[CIT Scanner] Error parsing " + id + ": " + e.getMessage());
                 }
             }
-            if (nameList.size() > 0) {
-                allResults = new String[nameList.size()][3];
-                for (int i = 0; i < nameList.size(); i++) {
-                   allResults[i][0] = nameList.get(i);
-                   allResults[i][1] = conditionList.get(i);
-                   allResults[i][2] = packList.get(i);
-                }
-            }
 
         } catch (Exception e) {
             System.err.println("[CIT Scanner] Resource scan error: " + e.getMessage());
         }
-        System.out.println("[CIT Scanner] Scan Finished");
-        return allResults;
+
+        System.out.println("[CIT Scanner] Scan finished, found " + rows.size() + " entries");
+        return rows.toArray(new String[0][3]);
     }
 
-    /** Recursively finds all objects with "type": "minecraft:select". */
+    // ---------- Helpers ----------
+
+    private static final Gson GSON = new Gson();
+
+    /** Recursively finds all objects with type: 'minecraft:select' */
     private static List<JsonObject> findSelectBlocks(JsonElement element) {
         List<JsonObject> found = new ArrayList<>();
-        if (element == null || element.isJsonNull())
-            return found;
+        if (element == null || element.isJsonNull()) return found;
 
         if (element.isJsonObject()) {
             JsonObject obj = element.getAsJsonObject();
@@ -139,5 +135,14 @@ public class CitScanner {
             }
         }
         return found;
+    }
+
+    /** Extracts a clean resource pack name */
+    private static String extractPackName(Resource res) {
+        String title = res.source().location().title().toString();
+        if (title.startsWith("literal{") && title.endsWith("}")) {
+            return title.substring(8, title.length() - 1);
+        }
+        return title;
     }
 }
