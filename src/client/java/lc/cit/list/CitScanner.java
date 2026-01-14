@@ -1,6 +1,9 @@
 package lc.cit.list;
 
-import com.google.gson.*;
+import com.google.gson.Strictness;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
@@ -9,12 +12,14 @@ import net.minecraft.server.packs.resources.ResourceManager;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CitScanner {
 
-    // ---------- Cache (safe publication) ----------
+    // ---------- Cache ----------
     private static volatile ResultCache CACHE = ResultCache.EMPTY;
+    private static final AtomicBoolean SCANNING = new AtomicBoolean(false);
 
     public static String[][] getCachedResults() {
         return CACHE.results;
@@ -25,172 +30,223 @@ public final class CitScanner {
     }
 
     public static void refreshCache() {
-        CACHE = ResultCache.loading();
-
-        Thread thread = new Thread(() -> {
-            ResultCache newCache = scanAll();
-            CACHE = newCache;
-            System.out.println("[CIT Scanner] Cache refreshed, entries: " + newCache.results.length);
-        }, "CitScanner-Thread");
-
-        thread.setDaemon(true);
-        thread.start();
-    }
-
-    // ---------- Core scanning ----------
-    private static ResultCache scanAll() {
-        ResourceManager rm = Minecraft.getInstance().getResourceManager();
-        List<String[]> rows = new ArrayList<>();
-
-        // Cache pack names per resource source
-        Map<Object, String> packNameCache = new HashMap<>();
-
-        try {
-            Map<Identifier, Resource> resources =
-                    rm.listResources("items", id -> id.getPath().endsWith(".json"));
-
-            for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {
-                Identifier id = entry.getKey();
-                Resource res = entry.getValue();
-
-                JsonObject root;
-                try (InputStreamReader reader =
-                             new InputStreamReader(res.open(), StandardCharsets.UTF_8)) {
-                    root = GSON.fromJson(reader, JsonObject.class);
-                } catch (Exception e) {
-                    continue;
-                }
-
-                if (root == null) {
-                    continue;
-                }
-
-                // Extract pack name once per pack
-                Object packKey = res.source();
-                String packName = packNameCache.computeIfAbsent(
-                        packKey, k -> extractPackName(root, res)
-                );
-
-                List<JsonObject> selectBlocks = new ArrayList<>(2);
-                findSelectBlocks(root, selectBlocks);
-
-                if (selectBlocks.isEmpty()) {
-                    continue;
-                }
-
-                String path = id.getPath();
-                if (!path.startsWith("items/")) {
-                    continue;
-                }
-
-                String itemName = path.substring(6, path.length() - 5);
-
-                for (JsonObject model : selectBlocks) {
-                    if (!isCustomNameSelector(model)) {
-                        continue;
-                    }
-
-                    JsonArray cases = model.getAsJsonArray("cases");
-                    for (JsonElement el : cases) {
-                        if (!el.isJsonObject()) continue;
-                        JsonObject caseObj = el.getAsJsonObject();
-                        if (!caseObj.has("when")) continue;
-
-                        JsonElement when = caseObj.get("when");
-                        if (when.isJsonPrimitive()) {
-                            rows.add(new String[]{
-                                    itemName,
-                                    when.getAsString(),
-                                    packName
-                            });
-                        } else if (when.isJsonArray()) {
-                            for (JsonElement we : when.getAsJsonArray()) {
-                                if (we.isJsonPrimitive()) {
-                                    rows.add(new String[]{
-                                            itemName,
-                                            we.getAsString(),
-                                            packName
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("[CIT Scanner] Resource scan error: " + e.getMessage());
+        if (!SCANNING.compareAndSet(false, true)) {
+            return;
         }
 
-        return new ResultCache(rows.toArray(new String[0][3]), true);
+        CACHE = ResultCache.loading();
+
+        Thread t = new Thread(CitScanner::scanAsync, "CitScanner-Thread");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    // ---------- Async scan ----------
+    private static void scanAsync() {
+        long start = System.currentTimeMillis();
+
+        try {
+            ResultCache result = scanAll();
+            CACHE = result;
+
+            System.out.println("[CIT Scanner] Loaded "
+                    + result.results.length
+                    + " entries in "
+                    + (System.currentTimeMillis() - start)
+                    + "ms");
+
+        } finally {
+            SCANNING.set(false);
+        }
+    }
+
+    // ---------- Core scan ----------
+    private static ResultCache scanAll() {
+        ResourceManager rm = Minecraft.getInstance().getResourceManager();
+
+        Map<Identifier, Resource> resources = rm.listResources("items", id -> id.getPath().endsWith(".json"));
+
+        if (resources.isEmpty()) {
+            return ResultCache.EMPTY_LOADED;
+        }
+
+        int threads = Math.max(2,
+                Runtime.getRuntime().availableProcessors() - 1);
+
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        ConcurrentLinkedQueue<String[]> rows = new ConcurrentLinkedQueue<>();
+        ConcurrentHashMap<Object, String> packNames = new ConcurrentHashMap<>();
+
+        try {
+            for (Map.Entry<Identifier, Resource> entry : resources.entrySet()) {
+                pool.execute(() -> scanResource(entry.getKey(), entry.getValue(), rows, packNames));
+            }
+        } finally {
+            pool.shutdown();
+            try {
+                pool.awaitTermination(10, TimeUnit.MINUTES);
+            } catch (InterruptedException ignored) {
+            }
+        }
+
+        String[][] result = rows.toArray(new String[0][3]);
+        return new ResultCache(result, true);
+    }
+
+    // ---------- Single resource scan ----------
+    private static void scanResource(
+            Identifier id,
+            Resource res,
+            ConcurrentLinkedQueue<String[]> out,
+            ConcurrentHashMap<Object, String> packNames) {
+        String path = id.getPath();
+        if (!path.startsWith("items/")) {
+            return;
+        }
+
+        String itemName = path.substring(6, path.length() - 5).intern();
+        String packName = packNames.computeIfAbsent(
+                res.source(),
+                k -> extractPackName(res).intern());
+
+        try (JsonReader reader = new JsonReader(
+                new InputStreamReader(res.open(), StandardCharsets.UTF_8))) {
+reader.setStrictness(Strictness.LENIENT);
+            scanJson(reader, itemName, packName, out);
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // ---------- Streaming JSON logic ----------
+    private static void scanJson(
+            JsonReader reader,
+            String item,
+            String pack,
+            ConcurrentLinkedQueue<String[]> out) throws Exception {
+
+        Deque<Boolean> selectStack = new ArrayDeque<>();
+
+        reader.beginObject();
+
+        while (reader.hasNext()) {
+            readAny(reader, item, pack, out, selectStack);
+        }
+
+        reader.endObject();
+    }
+
+    private static void readAny(
+            JsonReader reader,
+            String item,
+            String pack,
+            ConcurrentLinkedQueue<String[]> out,
+            Deque<Boolean> selectStack) throws Exception {
+
+        JsonToken token = reader.peek();
+
+        switch (token) {
+            case BEGIN_OBJECT -> readObject(reader, item, pack, out, selectStack);
+            case BEGIN_ARRAY -> readArray(reader, item, pack, out, selectStack);
+            default -> reader.skipValue();
+        }
+    }
+
+    private static void readObject(
+            JsonReader reader,
+            String item,
+            String pack,
+            ConcurrentLinkedQueue<String[]> out,
+            Deque<Boolean> selectStack) throws Exception {
+
+        boolean isSelect = false;
+        boolean valid = false;
+
+        reader.beginObject();
+
+        while (reader.hasNext()) {
+            String name = reader.nextName();
+
+            if ("type".equals(name)) {
+                String type = reader.nextString();
+                isSelect = "select".equals(type) || "minecraft:select".equals(type);
+                selectStack.push(isSelect);
+            } else if (isSelect && "property".equals(name)) {
+                valid = reader.nextString().endsWith("component");
+            } else if (isSelect && valid && "component".equals(name)) {
+                valid = reader.nextString().endsWith("custom_name");
+            } else if (isSelect && valid && "cases".equals(name)) {
+                readCases(reader, item, pack, out);
+            } else {
+                readAny(reader, item, pack, out, selectStack);
+            }
+        }
+
+        reader.endObject();
+
+        if (!selectStack.isEmpty()) {
+            selectStack.pop();
+        }
+    }
+
+    private static void readArray(
+            JsonReader reader,
+            String item,
+            String pack,
+            ConcurrentLinkedQueue<String[]> out,
+            Deque<Boolean> selectStack) throws Exception {
+
+        reader.beginArray();
+
+        while (reader.hasNext()) {
+            readAny(reader, item, pack, out, selectStack);
+        }
+
+        reader.endArray();
+    }
+
+    private static void readCases(
+            JsonReader reader,
+            String item,
+            String pack,
+            ConcurrentLinkedQueue<String[]> out) throws Exception {
+
+        reader.beginArray();
+
+        while (reader.hasNext()) {
+            reader.beginObject();
+
+            while (reader.hasNext()) {
+                String name = reader.nextName();
+                if ("when".equals(name)) {
+                    if (reader.peek() == JsonToken.STRING) {
+                        out.add(new String[] { item, reader.nextString(), pack });
+                    } else if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+                        reader.beginArray();
+                        while (reader.hasNext()) {
+                            if (reader.peek() == JsonToken.STRING) {
+                                out.add(new String[] { item, reader.nextString(), pack });
+                            } else {
+                                reader.skipValue();
+                            }
+                        }
+                        reader.endArray();
+                    } else {
+                        reader.skipValue();
+                    }
+                } else {
+                    reader.skipValue();
+                }
+            }
+
+            reader.endObject();
+        }
+
+        reader.endArray();
     }
 
     // ---------- Helpers ----------
-
-    private static final Gson GSON = new Gson();
-
-    /**
-     * Accumulator-style traversal to avoid list churn.
-     */
-    private static void findSelectBlocks(JsonElement element, List<JsonObject> out) {
-        if (element == null || element.isJsonNull()) return;
-
-        if (element.isJsonObject()) {
-            JsonObject obj = element.getAsJsonObject();
-
-            JsonElement typeEl = obj.get("type");
-            if (typeEl != null && typeEl.isJsonPrimitive()) {
-                String type = typeEl.getAsString();
-                if ("minecraft:select".equals(type) || "select".equals(type)) {
-                    out.add(obj);
-                }
-            }
-
-            for (JsonElement child : obj.asMap().values()) {
-                findSelectBlocks(child, out);
-            }
-        } else if (element.isJsonArray()) {
-            for (JsonElement e : element.getAsJsonArray()) {
-                findSelectBlocks(e, out);
-            }
-        }
-    }
-
-    private static boolean isCustomNameSelector(JsonObject model) {
-        if (!model.has("property") || !model.has("component") || !model.has("cases")) {
-            return false;
-        }
-
-        String property = normalize(model.get("property").getAsString());
-        String component = normalize(model.get("component").getAsString());
-
-        return "component".equals(property)
-                && "custom_name".equals(component)
-                && model.get("cases").isJsonArray();
-    }
-
-    private static String normalize(String s) {
-        return s.startsWith("minecraft:") ? s.substring(10) : s;
-    }
-
-    /**
-     * Uses already-parsed JSON, avoids reopening the resource.
-     */
-    private static String extractPackName(JsonObject root, Resource res) {
-        try {
-            JsonObject pack = root.getAsJsonObject("pack");
-            if (pack != null && pack.has("description")) {
-                JsonElement desc = pack.get("description");
-                if (desc.isJsonPrimitive()) {
-                    return desc.getAsString();
-                }
-                if (desc.isJsonObject() && desc.getAsJsonObject().has("text")) {
-                    return desc.getAsJsonObject().get("text").getAsString();
-                }
-                return desc.toString();
-            }
-        } catch (Exception ignored) {
-        }
-
+    private static String extractPackName(Resource res) {
         String title = res.source().location().title().toString();
         if (title.startsWith("literal{") && title.endsWith("}")) {
             return title.substring(8, title.length() - 1);
@@ -198,9 +254,10 @@ public final class CitScanner {
         return title;
     }
 
-    // ---------- Immutable cache holder ----------
+    // ---------- Cache holder ----------
     private record ResultCache(String[][] results, boolean loaded) {
         static final ResultCache EMPTY = new ResultCache(new String[0][3], false);
+        static final ResultCache EMPTY_LOADED = new ResultCache(new String[0][3], true);
 
         static ResultCache loading() {
             return new ResultCache(EMPTY.results, false);
