@@ -13,10 +13,7 @@ import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipPositioner;
-import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
-import net.minecraft.client.gui.screens.inventory.tooltip.TooltipRenderUtil;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -25,7 +22,6 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Style;
-import net.minecraft.world.item.component.TooltipProvider;
 
 public class TextureListScreen extends Screen {
     Identifier REFRESH_ICON = Identifier.fromNamespaceAndPath("cit-list", "textures/gui/refresh.png");
@@ -231,44 +227,41 @@ public class TextureListScreen extends Screen {
 
             if (refreshButton.isHoveredOrFocused()) {
 
-        Component tooltipText = Component.translatable("tooltip.cit-list.refresh");
-        List<ClientTooltipComponent> tooltip = new ArrayList<>();
+                Component tooltipText = Component.translatable("tooltip.cit-list.refresh");
+                List<ClientTooltipComponent> tooltip = new ArrayList<>();
 
-        for (String line : tooltipText.getString().split("\n")) {
-            tooltip.add(ClientTooltipComponent.create(
-                FormattedCharSequence.forward(line, Style.EMPTY)
-            ));
-        }
+                for (String line : tooltipText.getString().split("\n")) {
+                    tooltip.add(ClientTooltipComponent.create(
+                            FormattedCharSequence.forward(line, Style.EMPTY)));
+                }
 
-        ClientTooltipPositioner positioner = (screenWidth, screenHeight, tooltipWidth, tooltipHeight, mX, mY) -> {
-    int x = refreshButton.getX();
-    int y = refreshButton.getY() + refreshButton.getHeight() + 2;
+                ClientTooltipPositioner positioner = (screenWidth, screenHeight, tooltipWidth, tooltipHeight, mX,
+                        mY) -> {
+                    int x = refreshButton.getX();
+                    int y = refreshButton.getY() + refreshButton.getHeight() + 2;
 
-    // Clamp x so tooltip doesn't go off the right edge
-    if (x + tooltipWidth > screenWidth) {
-        x = screenWidth - tooltipWidth +20; // small padding from the edge
-    }
+                    // Clamp x so tooltip doesn't go off the right edge
+                    if (x + tooltipWidth > screenWidth) {
+                        x = screenWidth - tooltipWidth + 20; // small padding from the edge
+                    }
 
-    // Clamp y so tooltip doesn't go off the bottom edge
-    if (y + tooltipHeight > screenHeight) {
-        y = refreshButton.getY() - tooltipHeight - 2; // render above button instead
-    }
+                    // Clamp y so tooltip doesn't go off the bottom edge
+                    if (y + tooltipHeight > screenHeight) {
+                        y = refreshButton.getY() - tooltipHeight - 2; // render above button instead
+                    }
 
-    return new Vector2i(x, y);
-};
+                    return new Vector2i(x, y);
+                };
 
-
-
-        // Render tooltip at mouse position
-        context.renderTooltip(
-            this.font,
-            tooltip,
-            mouseX,
-            mouseY,
-            positioner,
-            null
-        );
-    }
+                // Render tooltip at mouse position
+                context.renderTooltip(
+                        this.font,
+                        tooltip,
+                        mouseX,
+                        mouseY,
+                        positioner,
+                        null);
+            }
 
         }
 
