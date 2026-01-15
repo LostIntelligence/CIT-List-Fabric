@@ -11,11 +11,15 @@ import net.minecraft.server.packs.resources.ResourceManager;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class CitScanner {
+    // ---------- logging ---------
+    private static final AtomicInteger FILES_PROCESSED = new AtomicInteger();
 
     // ---------- Cache ----------
     private static volatile ResultCache CACHE = ResultCache.EMPTY;
@@ -30,6 +34,8 @@ public final class CitScanner {
     }
 
     public static void refreshCache() {
+        FILES_PROCESSED.set(0);
+
         if (!SCANNING.compareAndSet(false, true)) {
             return;
         }
@@ -54,6 +60,11 @@ public final class CitScanner {
                     + " entries in "
                     + (System.currentTimeMillis() - start)
                     + "ms");
+            System.out.println("[CIT Scanner] Files proccessed: "
+                    + FILES_PROCESSED.get()
+                    + " in "
+                    + (System.currentTimeMillis() - start)
+                    + "ms");
 
         } finally {
             SCANNING.set(false);
@@ -73,11 +84,11 @@ public final class CitScanner {
         int threads = Math.min(4, Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
 
         ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
-    Thread t = new Thread(r, "CitScanner-Worker");
-    t.setDaemon(true);
-    t.setPriority(Thread.MIN_PRIORITY);
-    return t;
-});
+            Thread t = new Thread(r, "CitScanner-Worker");
+            t.setDaemon(true);
+            t.setPriority(Thread.MIN_PRIORITY);
+            return t;
+        });
         ConcurrentLinkedQueue<String[]> rows = new ConcurrentLinkedQueue<>();
         ConcurrentHashMap<Object, String> packNames = new ConcurrentHashMap<>();
 
@@ -103,6 +114,7 @@ public final class CitScanner {
             Resource res,
             ConcurrentLinkedQueue<String[]> out,
             ConcurrentHashMap<Object, String> packNames) {
+        FILES_PROCESSED.incrementAndGet();
         String path = id.getPath();
         if (!path.startsWith("items/")) {
             return;

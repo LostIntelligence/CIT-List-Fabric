@@ -1,5 +1,6 @@
 package lc.cit.list;
 
+import lc.cit.config.CitListConfig;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
@@ -17,6 +18,9 @@ public class CitScannerReloadListener implements ResourceManagerReloadListener {
 
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
+        if (!CitListConfig.get().scanOnResourceReload) {
+            return; 
+        }
         CitScanner.refreshCache();
     }
 }

@@ -5,6 +5,8 @@ import java.util.List;
 
 import org.joml.Vector2i;
 
+import lc.cit.config.CitListConfig;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -35,6 +37,7 @@ public class TextureListScreen extends Screen {
     private Button searchButton;
     private Button searchModeButton;
     private Button refreshButton;
+    private Button reloadToggleButton;
 
     private enum SearchMode {
         ITEM,
@@ -113,6 +116,32 @@ public class TextureListScreen extends Screen {
 
         this.addRenderableWidget(exitButton);
 
+        int toggleWidth = 130;
+        int toggleHeight = 20;
+
+        boolean enabled = CitListConfig.get().scanOnResourceReload;
+
+        this.reloadToggleButton = Button.builder(
+                Component.literal(enabled ? "Auto Reload: ON" : "Auto Reload: OFF"),
+                btn -> {
+                    CitListConfig config = CitListConfig.get();
+                    config.scanOnResourceReload = !config.scanOnResourceReload;
+                    CitListConfig.save();
+
+                    btn.setMessage(Component.literal(
+                            config.scanOnResourceReload
+                                    ? "Auto Reload: ON"
+                                    : "Auto Reload: OFF"));
+                })
+                .bounds(
+                        this.width - toggleWidth - 8,
+                        this.height - 25,
+                        toggleWidth,
+                        toggleHeight)
+                .build();
+
+        this.addRenderableWidget(this.reloadToggleButton);
+
         int buttonHeight = 20;
         int searchButtonWidth = 60;
         int modeButtonWidth = 80;
@@ -170,6 +199,9 @@ public class TextureListScreen extends Screen {
 
         this.addRenderableWidget(this.refreshButton);
 
+        this.reloadToggleButton.setTooltip(
+                net.minecraft.client.gui.components.Tooltip.create(
+                        Component.literal("Controls whether the CIT list\nrefreshes when resource packs reload")));
     }
 
     @Override
