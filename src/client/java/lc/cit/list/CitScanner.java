@@ -70,10 +70,14 @@ public final class CitScanner {
             return ResultCache.EMPTY_LOADED;
         }
 
-        int threads = Math.max(2,
-                Runtime.getRuntime().availableProcessors() - 1);
+        int threads = Math.min(4, Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
 
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
+    Thread t = new Thread(r, "CitScanner-Worker");
+    t.setDaemon(true);
+    t.setPriority(Thread.MIN_PRIORITY);
+    return t;
+});
         ConcurrentLinkedQueue<String[]> rows = new ConcurrentLinkedQueue<>();
         ConcurrentHashMap<Object, String> packNames = new ConcurrentHashMap<>();
 
@@ -111,7 +115,7 @@ public final class CitScanner {
 
         try (JsonReader reader = new JsonReader(
                 new InputStreamReader(res.open(), StandardCharsets.UTF_8))) {
-reader.setStrictness(Strictness.LENIENT);
+            reader.setStrictness(Strictness.LENIENT);
             scanJson(reader, itemName, packName, out);
 
         } catch (Exception ignored) {
@@ -248,6 +252,12 @@ reader.setStrictness(Strictness.LENIENT);
     // ---------- Helpers ----------
     private static String extractPackName(Resource res) {
         String title = res.source().location().title().toString();
+        // Treat all non-literal packs as server packs
+        if (!title.startsWith("literal{")) {
+            return "Server Pack";
+        }
+
+        // Normal client / mod / builtin packs
         if (title.startsWith("literal{") && title.endsWith("}")) {
             return title.substring(8, title.length() - 1);
         }
