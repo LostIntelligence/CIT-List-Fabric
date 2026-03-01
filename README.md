@@ -13,4 +13,4 @@ This fabric Minecraft mod scans All installed Resourcepacks For CIT (Custom Item
 
 ### Requires Modmenu
 
-<a href="https://modrinth.com/mod/modmenu"><img src="https://cdn.modrinth.com/data/mOgUt4GM/1bfe2006b38340e9d064700e41adf84a8abb1bd4_96.webp" width="50px"></a>
+<a href="https://modrinth.com/mod/modmenu"><img src="https://cdn.modrinth.com/data/mOgUt4GM/5a20ed1450a0e1e79a1fe04e61bb4e5878bf1d20.png" width="50px"></a>
