@@ -6,7 +6,8 @@ This fabric Minecraft mod scans All installed Resourcepacks For CIT (Custom Item
 
 ## Picture
 
-<img width="2553" height="1384" alt="image" src="https://github.com/user-attachments/assets/5c19d454-3037-4c32-8e14-5edf65acb7cc" />
+<img width="2559" height="1439" alt="image" src="https://github.com/user-attachments/assets/4bedf170-4a89-43bb-ab62-381ec4cd2a99" />
+
 
 ## Dependency
 
