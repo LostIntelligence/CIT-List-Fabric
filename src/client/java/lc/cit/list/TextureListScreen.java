@@ -8,7 +8,7 @@ import org.joml.Vector2i;
 import lc.cit.config.CitListConfig;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.ObjectSelectionList;
@@ -222,10 +222,10 @@ public class TextureListScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
 
         // Title
-        context.drawCenteredString(
+        context.gui().drawCenteredString(
                 this.font, this.title, this.width / 2, 3, 0xFFFFFFFF);
 
         int headerY = 20;
@@ -422,8 +422,8 @@ public class TextureListScreen extends Screen {
             }
 
             @Override
-            public void renderContent(
-                    GuiGraphics context,
+            public void extractContent(
+                    GuiGraphicsExtractor context,
                     int mouseX,
                     int mouseY,
                     boolean hovered,
