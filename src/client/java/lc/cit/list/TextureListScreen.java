@@ -225,23 +225,20 @@ public class TextureListScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
 
         // Title
-        context.gui().drawCenteredString(
-                this.font, this.title, this.width / 2, 3, 0xFFFFFFFF);
+        context.centeredText(this.font, this.title, this.width / 2, 3, 0xFFFFFFFF);
 
         int headerY = 20;
 
-        this.list.render(context, mouseX, mouseY, delta);
+        this.list.extractRenderState(context, mouseX, mouseY, delta);
         // List Header
         context.fill(0, headerY - 2, this.width, headerY + this.font.lineHeight + 2, 0xFF333333); // dark
                                                                                                   // background
-        context.drawString(this.font, "Item to Rename", column1X, headerY, 0xFFFFFFFF, true);
-        context.drawString(this.font, "New Name", column2X, headerY, 0xFFFFFFFF, true);
-        context.drawString(this.font, "Resourcepack", column3X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, "Item to Rename", column1X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, "New Name", column2X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, "Resourcepack", column3X, headerY, 0xFFFFFFFF, true);
 
-        // context.fill(0, this.height - 30, this.width, this.height - 30 + 3,
-        // 0xFFAAAAAA); // light gray line
         // Everything Else
-        super.render(context, mouseX, mouseY, delta);
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         if (refreshButton != null) {
             int centerX = refreshButton.getX() + refreshButton.getWidth() / 2;
@@ -249,13 +246,7 @@ public class TextureListScreen extends Screen {
 
             int color = refreshButton.isHoveredOrFocused() ? 0xFFFFAA00 : 0xFFFFFFFF;
 
-            context.drawString(
-                    this.font,
-                    "⟳", // Unicode refresh symbol
-                    centerX - this.font.width("⟳") / 2,
-                    centerY,
-                    color,
-                    false);
+            context.text(this.font, "⟳", centerX - this.font.width("⟳") / 2, centerY, color, false);
 
             if (refreshButton.isHoveredOrFocused()) {
 
@@ -286,13 +277,7 @@ public class TextureListScreen extends Screen {
                 };
 
                 // Render tooltip at mouse position
-                context.renderTooltip(
-                        this.font,
-                        tooltip,
-                        mouseX,
-                        mouseY,
-                        positioner,
-                        null);
+                context.tooltip( this.font, tooltip, mouseX, mouseY, positioner, null);
             }
 
         }
@@ -422,12 +407,7 @@ public class TextureListScreen extends Screen {
             }
 
             @Override
-            public void extractContent(
-                    GuiGraphicsExtractor context,
-                    int mouseX,
-                    int mouseY,
-                    boolean hovered,
-                    float deltaTicks) {
+            public void extractContent(   GuiGraphicsExtractor context,   int mouseX,   int mouseY,   boolean hovered,   float deltaTicks) {
                 Minecraft mc = Minecraft.getInstance();
                 int color = hovered ? 0xFFFFFFA0 : 0xFFFFFFFF;
 
@@ -437,16 +417,16 @@ public class TextureListScreen extends Screen {
                 // --- ICON ---
                 int iconX = column1X;
                 int iconY = getY() + (entryHeight - 16) / 2;
-                context.renderItem(stack, iconX, iconY);
+                context.item(stack, iconX, iconY);
 
                 // --- COLUMN 1: original item name ---
-                context.drawString(mc.font, itemName, column1X + 20, textY, color, false);
+                context.text(mc.font, itemName, column1X + 20, textY, color, false);
 
                 // --- COLUMN 2: new name ---
-                context.drawString(mc.font, newName, column2X, textY, color, false);
+                context.text(mc.font, newName, column2X, textY, color, false);
 
                 // --- COLUMN 3: pack name ---
-                context.drawString(mc.font, packName, column3X, textY, color, false);
+                context.text(mc.font, packName, column3X, textY, color, false);
             }
 
             @Override
