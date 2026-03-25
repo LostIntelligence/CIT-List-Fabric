@@ -46,6 +46,7 @@ public class TextureListScreen extends Screen {
     }
 
     private SearchMode searchMode = SearchMode.ITEM;
+    private boolean waitingForRefresh;
 
     public TextureListScreen(Screen parent) {
         super(Component.literal("Renameable CIT Textures"));
@@ -256,15 +257,28 @@ public class TextureListScreen extends Screen {
                 // Render tooltip at mouse position
                 context.tooltip(this.font, tooltip, mouseX, mouseY, positioner, null);
             }
-
         }
 
     }
 
+    @Override
+    public void tick() {
+        super.tick();
+        // When scan finishes → rebuild list
+        if (waitingForRefresh && CitScanner.isLoaded()) {
+            this.citArray = CitScanner.getCachedResults();
+            rebuildList(false);
+            waitingForRefresh = false;
+            this.setFocused(null);
+        }
+    }
+
     private void rebuildList(boolean refreshCache) {
         if (refreshCache) {
+            waitingForRefresh = true;
+            // !!!! Async
             CitScanner.refreshCache();
-            this.citArray = CitScanner.getCachedResults();
+            return;
         }
 
         String query = (searchBox != null)
