@@ -69,10 +69,13 @@ java {
 jar {
 	inputs.property "archivesName", project.base.archivesName
 
+	archiveFileName.set("${project.base.archivesName.get()}-${project.version}_${project.minecraft_version}.jar")
+
 	from("LICENSE") {
-		rename { "${it}_${inputs.properties.archivesName}"}
+		rename { "${it}_${inputs.properties.archivesName}" }
 	}
 }
+
 
 def modName = project.base.archivesName.get()
 def mcVersion = project.minecraft_version
