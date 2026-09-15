@@ -49,7 +49,7 @@ public class TextureListScreen extends Screen {
     private boolean waitingForRefresh;
 
     public TextureListScreen(Screen parent) {
-        super(Component.literal("Renameable CIT Textures"));
+        super(Component.translatable("screen.cit-list.title"));
         this.parent = parent;
         this.citArray = CitScanner.getCachedResults();
     }
@@ -90,13 +90,12 @@ public class TextureListScreen extends Screen {
         this.setInitialFocus(list);
 
         Button exitButton = Button.builder(
-                Component.literal("Exit"),
+                Component.translatable("button.cit-list.exit"),
                 button -> {
-                    System.out.println("Exit button clicked");
                     Minecraft.getInstance().gui.setScreen(parent);
                 })
                 .bounds(this.width / 2 - 50, this.height - 25, 100, 20)
-                .createNarration(supplier -> Component.literal("Exit button"))
+                .createNarration(supplier -> Component.translatable("narration.cit-list.exit"))
                 .build();
 
         this.addRenderableWidget(exitButton);
@@ -107,16 +106,13 @@ public class TextureListScreen extends Screen {
         boolean enabled = CitListConfig.get().scanOnResourceReload;
 
         this.reloadToggleButton = Button.builder(
-                Component.literal(enabled ? "Auto Reload: ON" : "Auto Reload: OFF"),
+            getReloadToggleMessage(enabled),
                 btn -> {
                     CitListConfig config = CitListConfig.get();
                     config.scanOnResourceReload = !config.scanOnResourceReload;
                     CitListConfig.save();
 
-                    btn.setMessage(Component.literal(
-                            config.scanOnResourceReload
-                                    ? "Auto Reload: ON"
-                                    : "Auto Reload: OFF"));
+                        btn.setMessage(getReloadToggleMessage(config.scanOnResourceReload));
                 })
                 .bounds(
                         this.width - toggleWidth - 8,
@@ -139,13 +135,13 @@ public class TextureListScreen extends Screen {
                 searchBarY,
                 this.width - (searchButtonWidth + modeButtonWidth + padding * 4),
                 buttonHeight,
-                Component.literal("Search"));
-        this.searchBox.setHint(Component.literal("Search..."));
+                Component.translatable("button.cit-list.search"));
+            this.searchBox.setHint(Component.translatable("hint.cit-list.search"));
         this.addRenderableWidget(this.searchBox);
 
         // --- MODE BUTTON ---
         this.searchModeButton = Button.builder(
-                Component.literal("Item"),
+            getSearchModeMessage(),
                 btn -> cycleSearchMode())
                 .bounds(
                         this.searchBox.getX() + this.searchBox.getWidth() + padding,
@@ -157,7 +153,7 @@ public class TextureListScreen extends Screen {
 
         // --- SEARCH BUTTON ---
         this.searchButton = Button.builder(
-                Component.literal("Search"),
+            Component.translatable("button.cit-list.search"),
                 btn -> rebuildList(false))
                 .bounds(
                         this.searchModeButton.getX() + modeButtonWidth + padding,
@@ -169,17 +165,17 @@ public class TextureListScreen extends Screen {
 
         // --- REFRESH BUTTON ---
         int buttonSize = 16;
-        this.refreshButton = Button.builder(Component.literal(""),
+        this.refreshButton = Button.builder(Component.empty(),
                 btn -> rebuildList(true))
                 .bounds(this.width - buttonSize, 0, buttonSize, buttonSize)
-                .createNarration(supplier -> Component.literal("Refresh the list"))
+            .createNarration(supplier -> Component.translatable("narration.cit-list.refresh"))
                 .build();
 
         this.addRenderableWidget(this.refreshButton);
 
         this.reloadToggleButton.setTooltip(
                 net.minecraft.client.gui.components.Tooltip.create(
-                        Component.literal("Controls whether the CIT list\nrefreshes when resource packs reload")));
+                    Component.translatable("tooltip.cit-list.auto_reload")));
     }
 
     @Override
@@ -211,9 +207,9 @@ public class TextureListScreen extends Screen {
         // List Header
         context.fill(0, headerY - 2, this.width, headerY + this.font.lineHeight + 2, 0xFF333333); // dark
                                                                                                   // background
-        context.text(this.font, "Item to Rename", column1X, headerY, 0xFFFFFFFF, true);
-        context.text(this.font, "New Name", column2X, headerY, 0xFFFFFFFF, true);
-        context.text(this.font, "Resourcepack", column3X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, Component.translatable("header.cit-list.item"), column1X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, Component.translatable("header.cit-list.new_name"), column2X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, Component.translatable("header.cit-list.resource_pack"), column3X, headerY, 0xFFFFFFFF, true);
 
         // Everything Else
         super.extractRenderState(context, mouseX, mouseY, delta);
@@ -224,7 +220,8 @@ public class TextureListScreen extends Screen {
 
             int color = refreshButton.isHoveredOrFocused() ? 0xFFFFAA00 : 0xFFFFFFFF;
 
-            context.text(this.font, "⟳", centerX - this.font.width("⟳") / 2, centerY, color, false);
+                String refreshIcon = "⟳";
+                context.text(this.font, refreshIcon, centerX - this.font.width(refreshIcon) / 2, centerY, color, false);
 
             if (refreshButton.isHoveredOrFocused()) {
 
@@ -295,7 +292,7 @@ public class TextureListScreen extends Screen {
             String target = switch (searchMode) {
                 case ITEM -> itemName;
                 case NEW_NAME -> newName;
-                case PACK -> packName;
+                case PACK -> getPackDisplayName(packName);
             };
 
             if (!query.isEmpty() && !target.toLowerCase().contains(query)) {
@@ -307,8 +304,11 @@ public class TextureListScreen extends Screen {
             if (item == null)
                 continue;
 
-            ItemStack stack = new ItemStack(item);
-            stack.set(DataComponents.CUSTOM_NAME, Component.literal(newName));
+            ItemStack stack = ItemStack.EMPTY;
+            if (Minecraft.getInstance().level != null) {
+                stack = new ItemStack(item);
+                stack.set(DataComponents.CUSTOM_NAME, Component.literal(newName));
+            }
 
             this.list.addMapping(stack, itemName, newName, packName);
         }
@@ -334,12 +334,21 @@ public class TextureListScreen extends Screen {
             case PACK -> searchMode = SearchMode.ITEM;
         }
 
-        this.searchModeButton.setMessage(Component.literal(
-                switch (searchMode) {
-                    case ITEM -> "Item";
-                    case NEW_NAME -> "Name";
-                    case PACK -> "Pack";
-                }));
+        this.searchModeButton.setMessage(getSearchModeMessage());
+    }
+
+    private Component getReloadToggleMessage(boolean enabled) {
+        return Component.translatable(enabled
+                ? "button.cit-list.auto_reload_on"
+                : "button.cit-list.auto_reload_off");
+    }
+
+    private Component getSearchModeMessage() {
+        return Component.translatable(switch (searchMode) {
+            case ITEM -> "button.cit-list.mode_item";
+            case NEW_NAME -> "button.cit-list.mode_name";
+            case PACK -> "button.cit-list.mode_pack";
+        });
     }
 
     private void calculateColumnPositions() {
@@ -351,7 +360,7 @@ public class TextureListScreen extends Screen {
         for (MappingsListWidget.TextEntry entry : list.children()) {
             int w1 = mc.font.width(entry.itemName);
             int w2 = mc.font.width(entry.newName);
-            int w3 = mc.font.width(entry.packName);
+            int w3 = mc.font.width(getPackDisplayName(entry.packName));
 
             max1 = Math.max(max1, w1);
             max2 = Math.max(max2, w2);
@@ -426,14 +435,24 @@ public class TextureListScreen extends Screen {
                 context.text(mc.font, newName, column2X, textY, color, false);
 
                 // --- COLUMN 3: pack name ---
-                context.text(mc.font, packName, column3X, textY, color, false);
+                context.text(mc.font, getPackDisplayName(packName), column3X, textY, color, false);
             }
 
             @Override
             public Component getNarration() {
-                return Component.literal(itemName + ", " + newName + ", " + packName);
+                return Component.translatable(
+                        "narration.cit-list.texture_entry",
+                        itemName,
+                        newName,
+                        getPackDisplayName(packName));
             }
         }
 
+    }
+
+    private static String getPackDisplayName(String packName) {
+        return CitScanner.SERVER_PACK_NAME.equals(packName)
+                ? Component.translatable(packName).getString()
+                : packName;
     }
 }

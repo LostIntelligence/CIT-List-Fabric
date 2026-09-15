@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class CitScanner {
+    public static final String SERVER_PACK_NAME = "pack.cit-list.server";
+
     // ---------- logging ---------
     private static final AtomicInteger FILES_PROCESSED = new AtomicInteger();
 
@@ -265,7 +267,7 @@ public final class CitScanner {
         String title = res.source().location().title().toString();
         // Treat all non-literal packs as server packs
         if (!title.startsWith("literal{")) {
-            return "Server Pack";
+            return SERVER_PACK_NAME;
         }
 
         // Normal client / mod / builtin packs
