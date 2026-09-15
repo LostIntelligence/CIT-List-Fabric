@@ -93,7 +93,7 @@ public class TextureListScreen extends Screen {
                 Component.literal("Exit"),
                 button -> {
                     System.out.println("Exit button clicked");
-                    Minecraft.getInstance().setScreen(parent);
+                    Minecraft.getInstance().gui.setScreen(parent);
                 })
                 .bounds(this.width / 2 - 50, this.height - 25, 100, 20)
                 .createNarration(supplier -> Component.literal("Exit button"))
@@ -255,7 +255,7 @@ public class TextureListScreen extends Screen {
                 };
 
                 // Render tooltip at mouse position
-                context.tooltip(this.font, tooltip, mouseX, mouseY, positioner, null);
+                context.tooltip(this.font, tooltip, mouseX, mouseY, positioner, null,false); 
             }
         }
 
@@ -319,7 +319,7 @@ public class TextureListScreen extends Screen {
 
     @Override
     public void onClose() {
-        Minecraft.getInstance().setScreen(parent);
+        Minecraft.getInstance().gui.setScreen(parent);
     }
 
     @Override

@@ -1,6 +1,5 @@
 package lc.cit.list;
 
-import org.lwjgl.glfw.GLFW;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -16,22 +15,20 @@ public class CITListClient implements ClientModInitializer {
   	CitScannerReloadListener.register();
 		// This entrypoint is suitable for setting up client-specific logic, such as
 		// rendering.
-		KeyMapping.Category CATEGORY = new KeyMapping.Category(
-				Identifier.fromNamespaceAndPath("cit-list", "openlist_category"));
+		KeyMapping.Category CATEGORY = new KeyMapping.Category(Identifier.fromNamespaceAndPath("cit-list", "openlist_category"));
 
 		KeyMapping openCitList = KeyMappingHelper.registerKeyMapping(
 				new KeyMapping(
 						"key.cit-list.openlist", // The translation key for the key mapping.
-						InputConstants.Type.KEYSYM, // // The type of the keybinding; KEYSYM for keyboard, MOUSE for
-													// mouse.keybinKeyBindingHelper
-						GLFW.GLFW_KEY_J, // The GLFW keycode of the key.
+						InputConstants.Type.KEYBOARD, // // The type of the keybinding
+						13, // The keycode of the key J.
 						CATEGORY // The category of the mapping.
 				));
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (openCitList.consumeClick()) {
 				if (client.player != null) {
-					Minecraft.getInstance().setScreen(new TextureListScreen(client.screen));
+					Minecraft.getInstance().gui.setScreen(new TextureListScreen(client.gui.screen()));
 				}
 			}
 		});
