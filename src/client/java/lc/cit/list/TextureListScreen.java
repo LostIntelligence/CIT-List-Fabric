@@ -8,7 +8,7 @@ import org.joml.Vector2i;
 import lc.cit.config.CitListConfig;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.ObjectSelectionList;
@@ -46,6 +46,7 @@ public class TextureListScreen extends Screen {
     }
 
     private SearchMode searchMode = SearchMode.ITEM;
+    private boolean waitingForRefresh;
 
     public TextureListScreen(Screen parent) {
         super(Component.literal("Renameable CIT Textures"));
@@ -83,23 +84,7 @@ public class TextureListScreen extends Screen {
                 column2X,
                 column3X);
 
-        for (int i = 0; i < citArray.length; i++) {
-            String itemName = citArray[i][0];
-            String newName = citArray[i][1];
-            String packName = citArray[i][2];
-
-            Identifier id = Identifier.fromNamespaceAndPath("minecraft", itemName);
-            Item item = BuiltInRegistries.ITEM.getValue(id);
-            if (item == null)
-                continue;
-
-            ItemStack stack = new ItemStack(item);
-            stack.set(DataComponents.CUSTOM_NAME, Component.literal(newName));
-
-            this.list.addMapping(stack, itemName, newName, packName);
-        }
-        // Compute column positions
-        calculateColumnPositions();
+        rebuildList(false);
 
         this.addWidget(list);
         this.setInitialFocus(list);
@@ -173,10 +158,7 @@ public class TextureListScreen extends Screen {
         // --- SEARCH BUTTON ---
         this.searchButton = Button.builder(
                 Component.literal("Search"),
-                btn -> {
-                    applySearch();
-                    list.setScrollAmount(0);
-                })
+                btn -> rebuildList(false))
                 .bounds(
                         this.searchModeButton.getX() + modeButtonWidth + padding,
                         searchBarY,
@@ -187,12 +169,8 @@ public class TextureListScreen extends Screen {
 
         // --- REFRESH BUTTON ---
         int buttonSize = 16;
-        this.refreshButton = Button.builder(Component.literal(""), // label hidden
-                btn -> {
-                    CitScanner.refreshCache();
-                    applySearch();
-
-                })
+        this.refreshButton = Button.builder(Component.literal(""),
+                btn -> rebuildList(true))
                 .bounds(this.width - buttonSize, 0, buttonSize, buttonSize)
                 .createNarration(supplier -> Component.literal("Refresh the list"))
                 .build();
@@ -222,26 +200,23 @@ public class TextureListScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
 
         // Title
-        context.drawCenteredString(
-                this.font, this.title, this.width / 2, 3, 0xFFFFFFFF);
+        context.centeredText(this.font, this.title, this.width / 2, 3, 0xFFFFFFFF);
 
         int headerY = 20;
 
-        this.list.render(context, mouseX, mouseY, delta);
+        this.list.extractRenderState(context, mouseX, mouseY, delta);
         // List Header
         context.fill(0, headerY - 2, this.width, headerY + this.font.lineHeight + 2, 0xFF333333); // dark
                                                                                                   // background
-        context.drawString(this.font, "Item to Rename", column1X, headerY, 0xFFFFFFFF, true);
-        context.drawString(this.font, "New Name", column2X, headerY, 0xFFFFFFFF, true);
-        context.drawString(this.font, "Resourcepack", column3X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, "Item to Rename", column1X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, "New Name", column2X, headerY, 0xFFFFFFFF, true);
+        context.text(this.font, "Resourcepack", column3X, headerY, 0xFFFFFFFF, true);
 
-        // context.fill(0, this.height - 30, this.width, this.height - 30 + 3,
-        // 0xFFAAAAAA); // light gray line
         // Everything Else
-        super.render(context, mouseX, mouseY, delta);
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         if (refreshButton != null) {
             int centerX = refreshButton.getX() + refreshButton.getWidth() / 2;
@@ -249,13 +224,7 @@ public class TextureListScreen extends Screen {
 
             int color = refreshButton.isHoveredOrFocused() ? 0xFFFFAA00 : 0xFFFFFFFF;
 
-            context.drawString(
-                    this.font,
-                    "⟳", // Unicode refresh symbol
-                    centerX - this.font.width("⟳") / 2,
-                    centerY,
-                    color,
-                    false);
+            context.text(this.font, "⟳", centerX - this.font.width("⟳") / 2, centerY, color, false);
 
             if (refreshButton.isHoveredOrFocused()) {
 
@@ -286,46 +255,36 @@ public class TextureListScreen extends Screen {
                 };
 
                 // Render tooltip at mouse position
-                context.renderTooltip(
-                        this.font,
-                        tooltip,
-                        mouseX,
-                        mouseY,
-                        positioner,
-                        null);
+                context.tooltip(this.font, tooltip, mouseX, mouseY, positioner, null);
             }
-
         }
 
     }
 
     @Override
-    public void onClose() {
-        Minecraft.getInstance().setScreen(parent);
+    public void tick() {
+        super.tick();
+        // When scan finishes → rebuild list
+        if (waitingForRefresh && CitScanner.isLoaded()) {
+            this.citArray = CitScanner.getCachedResults();
+            rebuildList(false);
+            waitingForRefresh = false;
+            this.setFocused(null);
+        }
     }
 
-    @Override
-    public boolean isPauseScreen() {
-        return true;
-    }
-
-    private void cycleSearchMode() {
-        switch (searchMode) {
-            case ITEM -> searchMode = SearchMode.NEW_NAME;
-            case NEW_NAME -> searchMode = SearchMode.PACK;
-            case PACK -> searchMode = SearchMode.ITEM;
+    private void rebuildList(boolean refreshCache) {
+        if (refreshCache) {
+            waitingForRefresh = true;
+            // !!!! Async
+            CitScanner.refreshCache();
+            return;
         }
 
-        this.searchModeButton.setMessage(Component.literal(
-                switch (searchMode) {
-                    case ITEM -> "Item";
-                    case NEW_NAME -> "Name";
-                    case PACK -> "Pack";
-                }));
-    }
+        String query = (searchBox != null)
+                ? searchBox.getValue().toLowerCase().trim()
+                : "";
 
-    private void applySearch() {
-        String query = searchBox.getValue().toLowerCase();
         this.list.clearMappings();
 
         for (String[] row : citArray) {
@@ -354,8 +313,33 @@ public class TextureListScreen extends Screen {
             this.list.addMapping(stack, itemName, newName, packName);
         }
 
-        // Recalculate column widths after filtering
         calculateColumnPositions();
+        this.list.setScrollAmount(0);
+    }
+
+    @Override
+    public void onClose() {
+        Minecraft.getInstance().setScreen(parent);
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return true;
+    }
+
+    private void cycleSearchMode() {
+        switch (searchMode) {
+            case ITEM -> searchMode = SearchMode.NEW_NAME;
+            case NEW_NAME -> searchMode = SearchMode.PACK;
+            case PACK -> searchMode = SearchMode.ITEM;
+        }
+
+        this.searchModeButton.setMessage(Component.literal(
+                switch (searchMode) {
+                    case ITEM -> "Item";
+                    case NEW_NAME -> "Name";
+                    case PACK -> "Pack";
+                }));
     }
 
     private void calculateColumnPositions() {
@@ -422,11 +406,7 @@ public class TextureListScreen extends Screen {
             }
 
             @Override
-            public void renderContent(
-                    GuiGraphics context,
-                    int mouseX,
-                    int mouseY,
-                    boolean hovered,
+            public void extractContent(GuiGraphicsExtractor context, int mouseX, int mouseY, boolean hovered,
                     float deltaTicks) {
                 Minecraft mc = Minecraft.getInstance();
                 int color = hovered ? 0xFFFFFFA0 : 0xFFFFFFFF;
@@ -437,16 +417,16 @@ public class TextureListScreen extends Screen {
                 // --- ICON ---
                 int iconX = column1X;
                 int iconY = getY() + (entryHeight - 16) / 2;
-                context.renderItem(stack, iconX, iconY);
+                context.item(stack, iconX, iconY);
 
                 // --- COLUMN 1: original item name ---
-                context.drawString(mc.font, itemName, column1X + 20, textY, color, false);
+                context.text(mc.font, itemName, column1X + 20, textY, color, false);
 
                 // --- COLUMN 2: new name ---
-                context.drawString(mc.font, newName, column2X, textY, color, false);
+                context.text(mc.font, newName, column2X, textY, color, false);
 
                 // --- COLUMN 3: pack name ---
-                context.drawString(mc.font, packName, column3X, textY, color, false);
+                context.text(mc.font, packName, column3X, textY, color, false);
             }
 
             @Override

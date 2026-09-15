@@ -13,7 +13,7 @@ public class CitScannerReloadListener implements ResourceManagerReloadListener {
 
     /** Call once during client init */
     public static void register() {
-        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloader(ID, new CitScannerReloadListener());
+        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloadListener(ID, new CitScannerReloadListener());
     }
 
     @Override
