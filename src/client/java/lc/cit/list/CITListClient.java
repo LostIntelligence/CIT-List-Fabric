@@ -21,7 +21,7 @@ public class CITListClient implements ClientModInitializer {
 				new KeyMapping(
 						"key.cit-list.openlist", // The translation key for the key mapping.
 						InputConstants.Type.KEYBOARD, // // The type of the keybinding
-						13, // The keycode of the key J.
+						InputConstants.KEY_J, // The keycode of the key J.
 						CATEGORY // The category of the mapping.
 				));
 
